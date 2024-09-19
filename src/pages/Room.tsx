@@ -67,12 +67,17 @@ export const RoomPage = () => {
     stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
     const data = await request(`/room-info/${roomId}`);
-    const { offer, candidate } = data;
-    console.log("join-room", { offer, candidate });
+    const { offer, candidates } = data;
+    console.log("join-room", { offer, candidates });
     await pc.setRemoteDescription(offer);
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
-    await pc.addIceCandidate(JSON.parse(candidate));
+    await Promise.all(
+      candidates.map(
+        async (candidate: string) =>
+          await pc.addIceCandidate(JSON.parse(candidate))
+      )
+    );
     socket.emit("answer", { answer, roomId });
     console.log("send-answer");
     done = true;
@@ -101,18 +106,39 @@ export const RoomPage = () => {
         }
       }
     };
-  }, [isHost, makeCall, roomId]);
+  }, [isHost, roomId]);
 
   useEffect(() => {
-    socket.on("user-answer", async (answer) => {
+    socket.on("user-answer", async ({ answer, candidates }) => {
+      console.log("Got answer from user", answer);
       await pc.setRemoteDescription(answer);
-    });
-    socket.on("user-candidate", async (candidate) => {
-      if (pc.remoteDescription) {
-        await pc.addIceCandidate(candidate);
-        setIsWaitingPeer(false);
-        console.log(pc);
+      if (candidates.length === 0) {
+        console.log("empty-candidates");
+        socket.emit("resend-candidates", roomId);
+        return;
       }
+      await Promise.all(
+        candidates.map(
+          async (candidate: string) =>
+            await pc.addIceCandidate(JSON.parse(candidate))
+        )
+      );
+      setIsWaitingPeer(false);
+      console.log(pc);
+    });
+
+    socket.on("user-candidates", async (candidates) => {
+      if (candidates.length === 0) {
+        console.log("empty-candidates");
+        socket.emit("resend-candidates", roomId);
+        return;
+      }
+      await Promise.all(
+        candidates.map(
+          async (candidate: string) =>
+            await pc.addIceCandidate(JSON.parse(candidate))
+        )
+      );
     });
   }, []);
 
@@ -121,7 +147,17 @@ export const RoomPage = () => {
       if (!remoteVideo.current) return;
       remoteVideo.current.srcObject = event.streams[0];
     };
-  }, [remoteVideo]);
+
+    pc.onsignalingstatechange = (event) => {
+      console.log("signaling-state", event);
+    };
+
+    pc.onicegatheringstatechange = () => {
+      if (!isHost && pc.iceGatheringState === "complete") {
+        socket.emit("user-candidate-complete", roomId);
+      }
+    };
+  }, [remoteVideo, isHost]);
 
   if (!roomId) {
     navigate("/404");
