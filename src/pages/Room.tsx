@@ -1,0 +1,172 @@
+import { Button } from "antd";
+import { useAtom, useSetAtom } from "jotai";
+import { useCallback, useEffect, useRef, useState } from "react";
+import toast from "react-hot-toast";
+import { useNavigate, useParams } from "react-router-dom";
+import { isHostAtom, roomIdAtom } from "../store/room";
+import { request } from "../utils/request";
+import openSocket from "socket.io-client";
+const SERVER_URL = import.meta.env.VITE_SERVER_URL;
+const socket = openSocket(`${SERVER_URL}`);
+
+const configuration = {
+  iceServers: [
+    {
+      urls: ["stun:stun1.l.google.com:19302", "stun:stun2.l.google.com:19302"],
+    },
+  ],
+  iceCandidatePoolSize: 10,
+};
+
+const pc = new RTCPeerConnection(configuration);
+
+const userName = `USER-${Math.floor(Math.random() * 1000)}`;
+
+let done = false;
+
+export const RoomPage = () => {
+  const { id: roomId } = useParams();
+  const navigate = useNavigate();
+
+  const [isHost, setIsHost] = useAtom(isHostAtom);
+  const setRoomId = useSetAtom(roomIdAtom);
+  const [isWaitingPeer, setIsWaitingPeer] = useState(() => isHost);
+
+  const localVideo = useRef<HTMLVideoElement>(null);
+  const remoteVideo = useRef<HTMLVideoElement>(null);
+
+  const makeCall = useCallback(async () => {
+    if (!localVideo.current) return;
+    // 1.The caller captures local Media via MediaDevices.getUserMedia
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: true,
+      audio: true,
+    });
+
+    localVideo.current.srcObject = stream;
+    // 2.The caller creates RTCPeerConnection and calls RTCPeerConnection.addTrack() (Since addStream is deprecating)
+    stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+    // 3. The caller calls RTCPeerConnection.createOffer() to create an offer.
+    const offer = await pc.createOffer();
+    // 4. The caller calls RTCPeerConnection.setLocalDescription() to set that offer as the local description (that is, the description of the local end of the connection).
+    await pc.setLocalDescription(offer);
+    socket.emit("offer", { roomId, offer, host: userName });
+    console.log("sent-offer");
+    done = true;
+  }, [roomId]);
+
+  const joinCall = useCallback(async () => {
+    if (!localVideo.current) return;
+    // 1.The callee captures local Media via MediaDevices.getUserMedia
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: true,
+      audio: true,
+    });
+    localVideo.current.srcObject = stream;
+    // 2.The callee creates RTCPeerConnection and calls RTCPeerConnection.addTrack() (Since addStream is deprecating)
+    stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+
+    const data = await request(`/room-info/${roomId}`);
+    const { offer, candidate } = data;
+    console.log("join-room", { offer, candidate });
+    await pc.setRemoteDescription(offer);
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    await pc.addIceCandidate(JSON.parse(candidate));
+    socket.emit("answer", { answer, roomId });
+    console.log("send-answer");
+    done = true;
+  }, [roomId]);
+
+  useEffect(() => {
+    if (!done) {
+      if (isHost) {
+        makeCall();
+      } else {
+        joinCall();
+      }
+    }
+
+    pc.onicecandidate = async (event) => {
+      if (event.candidate) {
+        const candidate = event.candidate;
+        if (isHost) {
+          console.log({ candidate, roomId });
+          socket.emit("host-candidate", { candidate, roomId });
+          console.log("send-host-candidate");
+          return;
+        } else {
+          console.log("request-callee-send-candidate");
+          socket.emit("user-candidate", { candidate, roomId });
+        }
+      }
+    };
+  }, [isHost, makeCall, roomId]);
+
+  useEffect(() => {
+    socket.on("user-answer", async (answer) => {
+      await pc.setRemoteDescription(answer);
+    });
+    socket.on("user-candidate", async (candidate) => {
+      if (pc.remoteDescription) {
+        await pc.addIceCandidate(candidate);
+        setIsWaitingPeer(false);
+        console.log(pc);
+      }
+    });
+  }, []);
+
+  useEffect(() => {
+    pc.ontrack = (event) => {
+      if (!remoteVideo.current) return;
+      remoteVideo.current.srcObject = event.streams[0];
+    };
+  }, [remoteVideo]);
+
+  if (!roomId) {
+    navigate("/404");
+    return null;
+  }
+
+  const onCopyRoomId = async () => {
+    await navigator.clipboard.writeText(roomId);
+    toast.success("Room ID copied to clipboard");
+  };
+
+  return (
+    <div>
+      <Button
+        onClick={() => {
+          setRoomId("");
+          setIsHost(false);
+          navigate("/", {
+            replace: true,
+          });
+        }}
+      >
+        Leave Room
+      </Button>
+      <div>
+        RoomID: <Button onClick={onCopyRoomId}>{roomId}</Button>
+      </div>
+      <p className="text-sm">Copy the RoomID to share with your partner</p>
+      <div className="flex gap-6">
+        <video
+          ref={localVideo}
+          className="rounded-sm"
+          autoPlay
+          playsInline
+          src=" "
+        ></video>
+        {isWaitingPeer && <p>Waiting for peer to join...</p>}
+        <video
+          ref={remoteVideo}
+          className={`${!isWaitingPeer ? "rounded-sm" : "w-0 h-0"}`}
+          autoPlay
+          playsInline
+          src=" "
+        ></video>
+      </div>
+    </div>
+  );
+};
