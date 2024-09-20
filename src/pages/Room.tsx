@@ -10,25 +10,10 @@ const SERVER_URL = import.meta.env.VITE_SERVER_URL;
 const socket = openSocket(`${SERVER_URL}`);
 
 const config = {
-  iceServers: [
-    // {
-    //   username:
-    //     "fCoVZEIMGRwt7p-WOb8NOJOenNONch_p7j0P9zHkAIqRcSGE7PZtbo7CZ280mWqPAAAAAGbtLR5qYXZ0aGFuaG5naGlh",
-    //   urls: [
-    //     "stun:hk-turn1.xirsys.com",
-    //     "turn:hk-turn1.xirsys.com:80?transport=udp",
-    //     "turn:hk-turn1.xirsys.com:3478?transport=udp",
-    //     "turn:hk-turn1.xirsys.com:80?transport=tcp",
-    //     "turn:hk-turn1.xirsys.com:3478?transport=tcp",
-    //     "turns:hk-turn1.xirsys.com:443?transport=tcp",
-    //     "turns:hk-turn1.xirsys.com:5349?transport=tcp",
-    //   ],
-    //   credential: "4cd6d9dc-7727-11ef-b620-0242ac120004",
-    // },
-  ],
+  iceServers: [],
 };
 
-const pc = new RTCPeerConnection(config);
+const pc = new RTCPeerConnection({ ...config, iceTransportPolicy: "relay" });
 
 (async () => {
   const res = await fetch("https://global.xirsys.net/_turn/owwirtc", {
