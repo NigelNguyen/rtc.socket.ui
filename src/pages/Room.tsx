@@ -34,6 +34,9 @@ export const RoomPage = () => {
   const [isHost, setIsHost] = useAtom(isHostAtom);
   const setRoomId = useSetAtom(roomIdAtom);
   const [isWaitingPeer, setIsWaitingPeer] = useState(() => isHost);
+  const [offer, setOffer] = useState<RTCSessionDescriptionInit | null>(null);
+  const [answer, setAnswer] = useState<RTCSessionDescriptionInit | null>(null);
+  const [candidates, setCandidates] = useState<string[]>([]);
 
   const localVideo = useRef<HTMLVideoElement>(null);
   const remoteVideo = useRef<HTMLVideoElement>(null);
@@ -51,12 +54,11 @@ export const RoomPage = () => {
     stream.getTracks().forEach((track) => pc.addTrack(track, stream));
     // 3. The caller calls RTCPeerConnection.createOffer() to create an offer.
     const offer = await pc.createOffer();
+    setOffer(offer);
     // 4. The caller calls RTCPeerConnection.setLocalDescription() to set that offer as the local description (that is, the description of the local end of the connection).
     await pc.setLocalDescription(offer);
-    socket.emit("offer", { roomId, offer, host: userName });
-    console.log("sent-offer");
     done = true;
-  }, [roomId]);
+  }, []);
 
   const joinCall = useCallback(async () => {
     if (!localVideo.current) return;
@@ -74,6 +76,7 @@ export const RoomPage = () => {
     console.log("join-room", { offer, candidates });
     await pc.setRemoteDescription(offer);
     const answer = await pc.createAnswer();
+    setAnswer(answer);
     await pc.setLocalDescription(answer);
     await Promise.all(
       candidates.map(
@@ -81,8 +84,6 @@ export const RoomPage = () => {
           await pc.addIceCandidate(JSON.parse(candidate))
       )
     );
-    socket.emit("answer", { answer, roomId });
-    console.log("send-answer");
     done = true;
   }, [roomId]);
 
@@ -94,32 +95,21 @@ export const RoomPage = () => {
         joinCall();
       }
     }
+  }, [isHost, makeCall, joinCall]);
 
+  useEffect(() => {
     pc.onicecandidate = async (event) => {
       if (event.candidate) {
         const candidate = event.candidate;
-        if (isHost) {
-          console.log({ candidate, roomId });
-          socket.emit("host-candidate", { candidate, roomId });
-          console.log("send-host-candidate");
-          return;
-        } else {
-          console.log("request-callee-send-candidate");
-          socket.emit("user-candidate", { candidate, roomId });
-        }
+        setCandidates((prev) => [...prev, JSON.stringify(candidate)]);
       }
     };
-  }, [isHost, roomId]);
+  }, []);
 
   useEffect(() => {
     socket.on("user-answer", async ({ answer, candidates }) => {
-      console.log("Got answer from user", answer);
+      console.log("Got answer from user", { answer, candidates });
       await pc.setRemoteDescription(answer);
-      if (candidates.length === 0) {
-        console.log("empty-candidates");
-        socket.emit("resend-candidates", roomId);
-        return;
-      }
       await Promise.all(
         candidates.map(
           async (candidate: string) =>
@@ -129,22 +119,28 @@ export const RoomPage = () => {
       setIsWaitingPeer(false);
       console.log(pc);
     });
+  }, [roomId]);
 
-    socket.on("user-candidates", async (candidates) => {
-      if (candidates.length === 0) {
-        console.log("empty-candidates");
-        socket.emit("resend-candidates", roomId);
-        return;
+  useEffect(() => {
+    pc.onicegatheringstatechange = () => {
+      if (
+        pc.iceGatheringState === "complete" &&
+        (answer || offer) &&
+        candidates.length > 0
+      ) {
+        if (isHost) {
+          socket.emit("offer-call", { roomId, offer, candidates, userName });
+          console.log("Sending offer to user");
+
+          return;
+        }
+        socket.emit("answer-call", { roomId, answer, candidates, userName });
+        console.log("Sending answer to host");
       }
-      await Promise.all(
-        candidates.map(
-          async (candidate: string) =>
-            await pc.addIceCandidate(JSON.parse(candidate))
-        )
-      );
-    });
-  }, []);
+    };
+  }, [isHost, roomId, answer, offer, candidates]);
 
+  // Update remote video when a new track is added
   useEffect(() => {
     pc.ontrack = (event) => {
       if (!remoteVideo.current) return;
@@ -154,13 +150,7 @@ export const RoomPage = () => {
     pc.onsignalingstatechange = (event) => {
       console.log("signaling-state", event);
     };
-
-    pc.onicegatheringstatechange = () => {
-      if (!isHost && pc.iceGatheringState === "complete") {
-        socket.emit("user-candidate-complete", roomId);
-      }
-    };
-  }, [remoteVideo, isHost]);
+  }, [remoteVideo]);
 
   if (!roomId) {
     navigate("/404");
@@ -172,19 +162,20 @@ export const RoomPage = () => {
     toast.success("Room ID copied to clipboard");
   };
 
+  const onLeaveRoom = () => {
+    setRoomId("");
+    setIsHost(false);
+    pc.close();
+    socket.disconnect();
+    navigate("/", {
+      replace: true,
+    });
+  };
+
   return (
     <div>
-      <Button
-        onClick={() => {
-          setRoomId("");
-          setIsHost(false);
-          navigate("/", {
-            replace: true,
-          });
-        }}
-      >
-        Leave Room
-      </Button>
+      <div>USER: {userName}</div>
+      <Button onClick={onLeaveRoom}>Leave Room</Button>
       <div>
         RoomID: <Button onClick={onCopyRoomId}>{roomId}</Button>
       </div>
