@@ -117,7 +117,9 @@ export const RoomPage = () => {
     };
   }, []);
 
-  socket.on("user-answer", async ({ answer, candidates }) => {
+  socket.on("user-answer", async (data) => {
+    console.log("answer data: ", data);
+    const { answer, candidates } = data;
     console.log("Got answer from user", { answer, candidates });
 
     if (candidates.length === 0) {
