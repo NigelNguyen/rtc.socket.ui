@@ -117,22 +117,33 @@ export const RoomPage = () => {
     };
   }, []);
 
-  useEffect(() => {
-    socket.on("user-answer", async ({ answer, candidates }) => {
-      console.log("Got answer from user", { answer, candidates });
+  socket.on("user-answer", async ({ answer, candidates }) => {
+    console.log("Got answer from user", { answer, candidates });
+
+    if (candidates.length === 0) {
+      console.log("EMPTY CANDIDATES");
+      setTimeout(() => {
+        socket.emit("resend-user-candidates", { roomId });
+        console.log("ASKING FOR USER CANDIDATES...");
+      }, 1000);
+      return;
+    }
+
+    if (!pc.remoteDescription) {
       await pc.setRemoteDescription(answer);
-      await Promise.all(
-        candidates.map(
-          async (candidate: string) =>
-            await pc
-              .addIceCandidate(JSON.parse(candidate))
-              .catch((e) => console.error("addIceCandidateError", e))
-        )
-      );
-      setIsWaitingPeer(false);
-      console.log(pc);
-    });
-  }, [roomId]);
+    }
+
+    await Promise.all(
+      candidates.map(
+        async (candidate: string) =>
+          await pc
+            .addIceCandidate(JSON.parse(candidate))
+            .catch((e) => console.error("addIceCandidateError", e))
+      )
+    );
+    setIsWaitingPeer(false);
+    console.log(pc);
+  });
 
   useEffect(() => {
     pc.onicegatheringstatechange = () => {
@@ -192,6 +203,7 @@ export const RoomPage = () => {
   return (
     <div>
       <div>USER: {userName}</div>
+      <div>SocketID: {socket.id}</div>
       <Button onClick={onLeaveRoom}>Leave Room</Button>
       <div>
         RoomID: <Button onClick={onCopyRoomId}>{roomId}</Button>
