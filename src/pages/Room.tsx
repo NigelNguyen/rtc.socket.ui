@@ -9,16 +9,19 @@ import openSocket from "socket.io-client";
 const SERVER_URL = import.meta.env.VITE_SERVER_URL;
 const socket = openSocket(`${SERVER_URL}`);
 
-const configuration = {
-  iceServers: [
-    {
-      urls: ["stun:stun1.l.google.com:19302", "stun:stun2.l.google.com:19302"],
-    },
-  ],
-  iceCandidatePoolSize: 10,
-};
+const peerConfiguration = { iceServers: [] };
 
-const pc = new RTCPeerConnection(configuration);
+(async () => {
+  const response = await fetch(
+    `https://owwi.metered.live/api/v1/turn/credentials?apiKey=${
+      import.meta.env.VITE_TURN_API_KEY
+    }`
+  );
+  const iceServers = await response.json();
+  peerConfiguration.iceServers = iceServers;
+})();
+console.log({ peerConfiguration });
+const pc = new RTCPeerConnection(peerConfiguration);
 
 const userName = `USER-${Math.floor(Math.random() * 1000)}`;
 
