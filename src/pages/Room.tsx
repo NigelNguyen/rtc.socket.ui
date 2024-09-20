@@ -57,7 +57,7 @@ export const RoomPage = () => {
     // 1.The caller captures local Media via MediaDevices.getUserMedia
     const stream = await navigator.mediaDevices.getUserMedia({
       video: true,
-      // audio: true,
+      audio: true,
     });
 
     localVideo.current.srcObject = stream;
@@ -76,7 +76,7 @@ export const RoomPage = () => {
     // 1.The callee captures local Media via MediaDevices.getUserMedia
     const stream = await navigator.mediaDevices.getUserMedia({
       video: true,
-      // audio: true,
+      audio: true,
     });
     localVideo.current.srcObject = stream;
     // 2.The callee creates RTCPeerConnection and calls RTCPeerConnection.addTrack() (Since addStream is deprecating)
