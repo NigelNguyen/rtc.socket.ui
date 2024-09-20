@@ -9,26 +9,24 @@ import openSocket from "socket.io-client";
 const SERVER_URL = import.meta.env.VITE_SERVER_URL;
 const socket = openSocket(`${SERVER_URL}`);
 
-const configs = {
-  iceServers: [
-    {
-      username:
-        "yUtu7QCxgD9294u4KYxr-bcYmG4IfNEgP7h1XzK1cTL4-OGoajqpjunQZ8v0l9-kAAAAAGbtIHRqYXZ0aGFuaG5naGlh",
-      urls: [
-        "stun:hk-turn1.xirsys.com",
-        "turn:hk-turn1.xirsys.com:80?transport=udp",
-        "turn:hk-turn1.xirsys.com:3478?transport=udp",
-        "turn:hk-turn1.xirsys.com:80?transport=tcp",
-        "turn:hk-turn1.xirsys.com:3478?transport=tcp",
-        "turns:hk-turn1.xirsys.com:443?transport=tcp",
-        "turns:hk-turn1.xirsys.com:5349?transport=tcp",
-      ],
-      credential: "c04e22e2-771f-11ef-9a36-0242ac120004",
+const config = { iceServers: [] };
+(async () => {
+  const res = await fetch("https://global.xirsys.net/_turn/owwirtc", {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization:
+        "Basic " + btoa("javthanhnghia:4ea4b994-771f-11ef-932c-0242ac130002"),
     },
-  ],
-};
+    body: JSON.stringify({ format: "urls" }),
+  });
+  const data = await res.json();
+  config.iceServers = data.v.iceServers;
+  console.log({ inside: config });
+})();
 
-const pc = new RTCPeerConnection(configs);
+console.log({ config });
+const pc = new RTCPeerConnection(config);
 
 const userName = `USER-${Math.floor(Math.random() * 1000)}`;
 
