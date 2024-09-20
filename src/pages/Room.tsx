@@ -143,6 +143,7 @@ export const RoomPage = () => {
   // Update remote video when a new track is added
   useEffect(() => {
     pc.ontrack = (event) => {
+      console.log("ontrack", { stream: event.streams });
       if (!remoteVideo.current) return;
       remoteVideo.current.srcObject = event.streams[0];
     };
@@ -170,6 +171,7 @@ export const RoomPage = () => {
     navigate("/", {
       replace: true,
     });
+    navigate(0);
   };
 
   return (
