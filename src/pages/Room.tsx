@@ -51,7 +51,7 @@ export const RoomPage = () => {
     // 1.The caller captures local Media via MediaDevices.getUserMedia
     const stream = await navigator.mediaDevices.getUserMedia({
       video: true,
-      audio: true,
+      // audio: true,
     });
 
     localVideo.current.srcObject = stream;
@@ -70,7 +70,7 @@ export const RoomPage = () => {
     // 1.The callee captures local Media via MediaDevices.getUserMedia
     const stream = await navigator.mediaDevices.getUserMedia({
       video: true,
-      audio: true,
+      // audio: true,
     });
     localVideo.current.srcObject = stream;
     // 2.The callee creates RTCPeerConnection and calls RTCPeerConnection.addTrack() (Since addStream is deprecating)
@@ -118,7 +118,9 @@ export const RoomPage = () => {
       await Promise.all(
         candidates.map(
           async (candidate: string) =>
-            await pc.addIceCandidate(JSON.parse(candidate))
+            await pc
+              .addIceCandidate(JSON.parse(candidate))
+              .catch((e) => console.error("addIceCandidateError", e))
         )
       );
       setIsWaitingPeer(false);
@@ -133,6 +135,7 @@ export const RoomPage = () => {
         (answer || offer) &&
         candidates.length > 0
       ) {
+        console.log("send candidates: ", candidates);
         if (isHost) {
           socket.emit("offer-call", { roomId, offer, candidates, userName });
           console.log("Sending offer to user");
@@ -143,6 +146,7 @@ export const RoomPage = () => {
         console.log("Sending answer to host");
       }
     };
+    console.log({ candidates });
   }, [isHost, roomId, answer, offer, candidates]);
 
   // Update remote video when a new track is added
