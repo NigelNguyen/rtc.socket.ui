@@ -117,35 +117,37 @@ export const RoomPage = () => {
     };
   }, []);
 
-  socket.on("user-answer", async (data) => {
-    console.log("answer data: ", data);
-    const { answer, candidates } = data;
-    console.log("Got answer from user", { answer, candidates });
-
-    if (candidates.length === 0) {
-      console.log("EMPTY CANDIDATES");
-      setTimeout(() => {
-        socket.emit("resend-user-candidates", { roomId });
-        console.log("ASKING FOR USER CANDIDATES...");
-      }, 1000);
-      return;
-    }
-
-    if (!pc.remoteDescription) {
-      await pc.setRemoteDescription(answer);
-    }
-
-    await Promise.all(
-      candidates.map(
-        async (candidate: string) =>
-          await pc
-            .addIceCandidate(JSON.parse(candidate))
-            .catch((e) => console.error("addIceCandidateError", e))
-      )
-    );
-    setIsWaitingPeer(false);
-    console.log(pc);
-  });
+  useEffect(()=>{
+    socket.on("user-answer", async (data) => {
+      console.log("answer data: ", data);
+      const { answer, candidates } = data;
+      console.log("Got answer from user", { answer, candidates });
+  
+      if (candidates.length === 0) {
+        console.log("EMPTY CANDIDATES");
+        setTimeout(() => {
+          socket.emit("resend-user-candidates", { roomId });
+          console.log("ASKING FOR USER CANDIDATES...");
+        }, 1000);
+        return;
+      }
+  
+      if (!pc.remoteDescription) {
+        await pc.setRemoteDescription(answer);
+      }
+  
+      await Promise.all(
+        candidates.map(
+          async (candidate: string) =>
+            await pc
+              .addIceCandidate(JSON.parse(candidate))
+              .catch((e) => console.error("addIceCandidateError", e))
+        )
+      );
+      setIsWaitingPeer(false);
+      console.log(pc);
+    });
+  },[roomId])
 
   useEffect(() => {
     pc.onicegatheringstatechange = () => {
