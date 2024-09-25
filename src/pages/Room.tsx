@@ -1,4 +1,4 @@
-import { Button } from "antd";
+import { Button, Spin } from "antd";
 import { useAtom, useSetAtom } from "jotai";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
@@ -6,6 +6,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { isHostAtom, roomIdAtom } from "../store/room";
 import { request } from "../utils/request";
 import openSocket from "socket.io-client";
+import { LogoutOutlined } from "@ant-design/icons";
 const SERVER_URL = import.meta.env.VITE_SERVER_URL;
 const TURN_API_KEY = import.meta.env.VITE_TURN_API_KEY;
 const TURN_APP_NAME = import.meta.env.VITE_TURN_APP_NAME;
@@ -34,7 +35,10 @@ let done = false;
 export const RoomPage = () => {
   const { id: roomId } = useParams();
   const navigate = useNavigate();
-  const pc = useMemo(() => new RTCPeerConnection({ ...config, iceTransportPolicy: "all" }), []);
+  const pc = useMemo(
+    () => new RTCPeerConnection({ ...config, iceTransportPolicy: "all" }),
+    []
+  );
 
   const [isHost, setIsHost] = useAtom(isHostAtom);
   const [isPreparingCall, setIsPreparingCall] = useState(false);
@@ -48,7 +52,7 @@ export const RoomPage = () => {
   const remoteVideo = useRef<HTMLVideoElement>(null);
 
   const makeCall = useCallback(async () => {
-    setIsPreparingCall(true)
+    setIsPreparingCall(true);
     if (!localVideo.current) return;
     // 1.The caller captures local Media via MediaDevices.getUserMedia
     const stream = await navigator.mediaDevices.getUserMedia({
@@ -74,7 +78,7 @@ export const RoomPage = () => {
       video: true,
       audio: true,
     });
-  
+
     localVideo.current.srcObject = stream;
     // 2.The callee creates RTCPeerConnection and calls RTCPeerConnection.addTrack() (Since addStream is deprecating)
     stream.getTracks().forEach((track) => pc.addTrack(track, stream));
@@ -145,19 +149,24 @@ export const RoomPage = () => {
       );
       setIsWaitingPeer(false);
       pc.getStats().then((stats) => {
-        stats.forEach(report => {
-          if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+        stats.forEach((report) => {
+          if (
+            report.type === "candidate-pair" &&
+            report.state === "succeeded"
+          ) {
             // This is the active candidate pair
             const localCandidateId = report.localCandidateId;
             const remoteCandidateId = report.remoteCandidateId;
-    
+
             // Find details about the local candidate
-            stats.forEach(candidate => {
+            stats.forEach((candidate) => {
               if (candidate.id === localCandidateId) {
                 console.log(`Local candidate type: ${candidate.candidateType}`);
               }
               if (candidate.id === remoteCandidateId) {
-                console.log(`Remote candidate type: ${candidate.candidateType}`);
+                console.log(
+                  `Remote candidate type: ${candidate.candidateType}`
+                );
               }
             });
           }
@@ -177,7 +186,7 @@ export const RoomPage = () => {
         if (isHost) {
           socket.emit("offer-call", { roomId, offer, candidates, userName });
           console.log("Sending offer to user");
-          setIsPreparingCall(false)
+          setIsPreparingCall(false);
           return;
         }
         socket.emit("answer-call", { roomId, answer, candidates, userName });
@@ -247,30 +256,42 @@ export const RoomPage = () => {
 
   return (
     <div>
-      <div>USER: {userName}</div>
-      <div>SocketID: {socket.id}</div>
-      <Button onClick={onLeaveRoom}>Leave Room</Button>
-      <div>
-        RoomID: <Button onClick={onCopyRoomId} loading={isPreparingCall}>{isPreparingCall ? '...' : roomId}</Button>
+      <div className="flex flex-col justify-start gap-2">
+        <div title={`socketID: ${socket.id}`}>USER: {userName}</div>
+        <p className="text-sm">Copy the RoomID to share with your partner</p>
+        <div>
+          RoomID:{" "}
+          <Button onClick={onCopyRoomId} loading={isPreparingCall}>
+            {isPreparingCall ? "..." : roomId}
+          </Button>
+        </div>
       </div>
-      <p className="text-sm">Copy the RoomID to share with your partner</p>
-      <div className="flex gap-6">
+      <div className="flex flex-wrap justify-center gap-6 mt-8">
         <video
           ref={localVideo}
-          className="rounded-sm"
+          className="w-full border rounded-lg max-w-[calc(50%-12px)] min-h-60 min-w-80"
           autoPlay
           playsInline
           src=" "
         ></video>
-        {isWaitingPeer && <p>Waiting for peer to join...</p>}
         <video
           ref={remoteVideo}
-          className={`${!isWaitingPeer ? "rounded-sm" : "w-0 h-0"}`}
+          className="w-full border rounded-lg max-w-[calc(50%-12px)] min-h-60 min-w-80"
           autoPlay
           playsInline
           src=" "
         ></video>
       </div>
+      {isWaitingPeer && (
+        <div className="flex items-center justify-center gap-2 mt-4">
+          <Spin />
+          <p>Waiting for peer to join...</p>
+        </div>
+      )}
+
+      <Button onClick={onLeaveRoom} className="mt-4 text-white bg-red-500">
+        <LogoutOutlined /> Leave Room
+      </Button>
     </div>
   );
 };

@@ -1,4 +1,4 @@
-import { EnterOutlined } from "@ant-design/icons";
+import { LoginOutlined } from "@ant-design/icons";
 import { Button, Form, Input, InputRef, Modal } from "antd";
 import { useSetAtom } from "jotai";
 import { useRef, useState } from "react";
@@ -40,7 +40,7 @@ export const JoinRoom = () => {
   return (
     <>
       <Button onClick={showModal}>
-        <EnterOutlined /> Join a room
+        <LoginOutlined /> Join a room
       </Button>
       <Modal
         title="Join a room"
