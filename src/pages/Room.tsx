@@ -34,7 +34,7 @@ let done = false;
 export const RoomPage = () => {
   const { id: roomId } = useParams();
   const navigate = useNavigate();
-  const pc = useMemo(() => new RTCPeerConnection({ ...config, iceTransportPolicy: "relay" }), []);
+  const pc = useMemo(() => new RTCPeerConnection({ ...config, iceTransportPolicy: "all" }), []);
 
   const [isHost, setIsHost] = useAtom(isHostAtom);
   const setRoomId = useSetAtom(roomIdAtom);
@@ -72,6 +72,7 @@ export const RoomPage = () => {
       video: true,
       audio: true,
     });
+  
     localVideo.current.srcObject = stream;
     // 2.The callee creates RTCPeerConnection and calls RTCPeerConnection.addTrack() (Since addStream is deprecating)
     stream.getTracks().forEach((track) => pc.addTrack(track, stream));
