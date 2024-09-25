@@ -37,6 +37,7 @@ export const RoomPage = () => {
   const pc = useMemo(() => new RTCPeerConnection({ ...config, iceTransportPolicy: "all" }), []);
 
   const [isHost, setIsHost] = useAtom(isHostAtom);
+  const [isPreparingCall, setIsPreparingCall] = useState(false);
   const setRoomId = useSetAtom(roomIdAtom);
   const [isWaitingPeer, setIsWaitingPeer] = useState(() => isHost);
   const [offer, setOffer] = useState<RTCSessionDescriptionInit | null>(null);
@@ -47,6 +48,7 @@ export const RoomPage = () => {
   const remoteVideo = useRef<HTMLVideoElement>(null);
 
   const makeCall = useCallback(async () => {
+    setIsPreparingCall(true)
     if (!localVideo.current) return;
     // 1.The caller captures local Media via MediaDevices.getUserMedia
     const stream = await navigator.mediaDevices.getUserMedia({
@@ -107,7 +109,6 @@ export const RoomPage = () => {
     pc.onicecandidate = async (event) => {
       if (event.candidate) {
         const candidate = event.candidate;
-        console.log({ oncandidate: candidate });
         setCandidates((prev) => [...prev, JSON.stringify(candidate)]);
       }
     };
@@ -118,7 +119,6 @@ export const RoomPage = () => {
 
   useEffect(() => {
     socket.on("user-answer", async (data) => {
-      console.log("answer data: ", data);
       const { answer, candidates } = data;
       console.log("Got answer from user", { answer, candidates });
 
@@ -126,7 +126,7 @@ export const RoomPage = () => {
         console.log("EMPTY CANDIDATES");
         setTimeout(() => {
           socket.emit("resend-user-candidates", { roomId });
-          console.log("ASKING FOR USER CANDIDATES...");
+          console.log("ASKING FOR USER CANDIDATES AGAIN...");
         }, 1000);
         return;
       }
@@ -145,12 +145,24 @@ export const RoomPage = () => {
       );
       setIsWaitingPeer(false);
       pc.getStats().then((stats) => {
-        stats.forEach((report) => {
-          console.log("report: ",{ ...report });
+        stats.forEach(report => {
+          if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+            // This is the active candidate pair
+            const localCandidateId = report.localCandidateId;
+            const remoteCandidateId = report.remoteCandidateId;
+    
+            // Find details about the local candidate
+            stats.forEach(candidate => {
+              if (candidate.id === localCandidateId) {
+                console.log(`Local candidate type: ${candidate.candidateType}`);
+              }
+              if (candidate.id === remoteCandidateId) {
+                console.log(`Remote candidate type: ${candidate.candidateType}`);
+              }
+            });
+          }
         });
       });
-
-      console.log(pc);
     });
   }, [roomId, pc]);
 
@@ -165,7 +177,7 @@ export const RoomPage = () => {
         if (isHost) {
           socket.emit("offer-call", { roomId, offer, candidates, userName });
           console.log("Sending offer to user");
-
+          setIsPreparingCall(false)
           return;
         }
         socket.emit("answer-call", { roomId, answer, candidates, userName });
@@ -239,7 +251,7 @@ export const RoomPage = () => {
       <div>SocketID: {socket.id}</div>
       <Button onClick={onLeaveRoom}>Leave Room</Button>
       <div>
-        RoomID: <Button onClick={onCopyRoomId}>{roomId}</Button>
+        RoomID: <Button onClick={onCopyRoomId} loading={isPreparingCall}>{isPreparingCall ? '...' : roomId}</Button>
       </div>
       <p className="text-sm">Copy the RoomID to share with your partner</p>
       <div className="flex gap-6">
